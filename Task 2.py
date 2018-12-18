@@ -12,10 +12,14 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
 '''Bohr radius in angstroms'''
-a0 = 0.52917721092
+a0 = 0.52917721092 
 
-'''Unified atomic mass unit in kg'''
-m_u = 1.66053904 * 10**-27
+#'''Unified atomic mass unit in kg'''
+#m_u = 1.66053904 * 10**-27
+
+'''Unified atomic mass unit in atomic units'''
+m_u = 1822.888486192
+
 
 '''Get path of current file'''
 dirname = os.path.dirname(__file__)
@@ -87,35 +91,28 @@ def rezero(array_in, new_zero):
     return [x-new_zero for x in array_in]
 
 
+def chunk(array, l, u, ind):
+    return(array[ind-l:ind+l])
+
+
 def fit_data(molecule):
     '''Energy and minimums in arrays'''
     E = val_arr(molecule)    
     [r_min, r_ind, theta_min, theta_ind, E_min] = eqm(molecule)
     
     '''define r and theta values, and re-zero & scale them for fitting'''
-    r = np.linspace(0.7,1.9,25)
-    theta = np.linspace(70,160,91)
+    old_r = np.linspace(0.7,1.9,25)
+    old_theta = np.linspace(70,160,91)
     
-    r_rezero = rezero(r, r_min)
-    r_rezero = [x for x in r_rezero]
+    r = rezero(old_r, r_min)
+    r = [x / a0 for x in r]
     '''/ a0 after first x'''
     
-    theta_rezero = rezero(theta, theta_min)
+    theta = rezero(old_theta, theta_min)
     
     '''make arrays of E values for each degree of freedom across minimum energy value'''
     E_r_min = E[r_ind]
     E_theta_min = E[:,theta_ind]
-    
-    '''Define parameters for data chunk size tc: "theta chunk"; rc: "r chunk"'''
-    tc_u = 20
-    tc_l = 15
-    
-    rc_u = 4
-    rc_l = 3
-    
-    '''pick a 'chunk' of data to fit'''
-    theta_chunk = E_r_min[theta_ind - tc_l : theta_ind + tc_u]
-    r_chunk = E_theta_min[r_ind - rc_l : r_ind + rc_u]
     
     '''Fit curve to a + cx^2 curve, and return parameters (a,c)'''
     x0 = np.array([0,0])
@@ -125,24 +122,31 @@ def fit_data(molecule):
         params, params_covariance = optimization.curve_fit(fn, dof, dof_E, x0)
         print(params)
         return(params)
+        
+    '''Define parameters for data chunk size; 
+    tc: "theta chunk"; rc: "r chunk"'''
+    tc_u = 25
+    tc_l = 20
+    
+    rc_u = 4
+    rc_l = 3
     
     '''Get fit parameters for theta and r curves'''
-    params_theta = fit_each(theta_chunk, theta_rezero[theta_ind - tc_l : theta_ind + tc_u])
-    params_r = fit_each(r_chunk, r_rezero[r_ind - rc_l : r_ind + rc_u])
+    params_theta = fit_each(chunk(E_r_min, tc_l, tc_u, theta_ind), chunk(theta, tc_l, tc_u, theta_ind))
+    params_r = fit_each(chunk(E_theta_min, rc_l, rc_u, r_ind), chunk(r, rc_l, rc_u, r_ind))
     
     '''define quadratic functions based on theta and r parameters'''
-    fnplot_theta = [params_theta[0] + float(params_theta[1]) * x**2 for x in theta_rezero]
-    fnplot_r = [params_r[0] + float(params_r[1]) * x**2 for x in r_rezero]
-    
+    fnplot_theta = [params_theta[0] + float(params_theta[1]) * x**2 for x in theta]
+    fnplot_r = [params_r[0] + float(params_r[1]) * x**2 for x in r]
     
     '''plot E vs 'degree of freedom' scatter, and overlay fitted curve; for visual checking'''
     plt.figure(1)
-    plt.scatter(theta_rezero, E_r_min, marker = ".")
-    plt.plot(theta_rezero, fnplot_theta)
+    plt.scatter(theta, E_r_min, marker = ".")
+    plt.plot(theta, fnplot_theta)
     
     plt.figure(2)
-    plt.scatter(r_rezero, E_theta_min, marker = ".")
-    plt.plot(r_rezero, fnplot_r)
+    plt.scatter(r, E_theta_min, marker = ".")
+    plt.plot(r, fnplot_r)
     
     plt.show()
     
@@ -162,5 +166,6 @@ def get_freq(params):
     return v_1, v_2, v_1/v_2
     
     
-#print(fit_data("H2S"))
 print(get_freq(fit_data("H2O")))
+    
+#np.savetxt('Energy Table.csv', table("H2O"), delimiter=',')
