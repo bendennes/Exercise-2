@@ -15,13 +15,7 @@ from matplotlib import cm
 a0 = 0.52917721092
 
 '''Unified atomic mass unit in kg'''
-mu = 1.66053904 * 10**-27
-
-'''Electron mass in kg'''
-me = 9.10938291 * 10**-31
-
-'''c in cm/s'''
-c = 100 * 299792458
+m_u = 1.66053904 * 10**-27
 
 '''Get path of current file'''
 dirname = os.path.dirname(__file__)
@@ -103,7 +97,7 @@ def fit_data(molecule):
     theta = np.linspace(70,160,91)
     
     r_rezero = rezero(r, r_min)
-    r_rezero = [x for x in r_rezero] 
+    r_rezero = [x for x in r_rezero]
     '''/ a0 after first x'''
     
     theta_rezero = rezero(theta, theta_min)
@@ -112,25 +106,33 @@ def fit_data(molecule):
     E_r_min = E[r_ind]
     E_theta_min = E[:,theta_ind]
     
+    '''Define parameters for data chunk size tc: "theta chunk"; rc: "r chunk"'''
+    tc_u = 20
+    tc_l = 15
+    
+    rc_u = 4
+    rc_l = 3
+    
     '''pick a 'chunk' of data to fit'''
-    theta_chunk = E_r_min[theta_ind-15:theta_ind+15]
-    r_chunk = E_theta_min[r_ind-4:r_ind+4]
+    theta_chunk = E_r_min[theta_ind - tc_l : theta_ind + tc_u]
+    r_chunk = E_theta_min[r_ind - rc_l : r_ind + rc_u]
     
     '''Fit curve to a + cx^2 curve, and return parameters (a,c)'''
     x0 = np.array([0,0])
     def fn(x, a, c):
-        return a + c*x*x
+        return a + c * x**2
     def fit_each(dof_E, dof):
         params, params_covariance = optimization.curve_fit(fn, dof, dof_E, x0)
+        print(params)
         return(params)
     
     '''Get fit parameters for theta and r curves'''
-    params_theta = fit_each(theta_chunk, theta_rezero[theta_ind-15:theta_ind+15])
-    params_r = fit_each(r_chunk, r_rezero[r_ind-4:r_ind+4])
+    params_theta = fit_each(theta_chunk, theta_rezero[theta_ind - tc_l : theta_ind + tc_u])
+    params_r = fit_each(r_chunk, r_rezero[r_ind - rc_l : r_ind + rc_u])
     
     '''define quadratic functions based on theta and r parameters'''
-    fnplot_theta = [params_theta[0] + float(params_theta[1])*x*x for x in theta_rezero]
-    fnplot_r = [params_r[0] + float(params_r[1])*x*x for x in r_rezero]
+    fnplot_theta = [params_theta[0] + float(params_theta[1]) * x**2 for x in theta_rezero]
+    fnplot_r = [params_r[0] + float(params_r[1]) * x**2 for x in r_rezero]
     
     
     '''plot E vs 'degree of freedom' scatter, and overlay fitted curve; for visual checking'''
@@ -148,13 +150,16 @@ def fit_data(molecule):
 
 
 def get_freq(params):
-    r_eq = params[2] 
-    '''/ a0 after params[2]'''
+    r_eq = params[2] / a0
+    '''a0 after params[2]'''
     
-    v1 = 1/(2*np.pi) * np.sqrt( (params[1][1]) / (2 * mu) )
-    v2 = 1/(2*np.pi) * np.sqrt( (params[0][1]) / (r_eq**2 * 0.5 * mu) )
+    k_r = 2 * params[1][1]
+    k_theta = 2 * params[0][1]
     
-    return v1/c, v2/c, params[1][1], params[0][1]
+    v_1 = 1/(2 * np.pi) * np.sqrt(k_r / (2 * m_u))
+    v_2 = 1/(2 * np.pi) * np.sqrt(k_theta / (r_eq**2 * (0.5 * m_u)))
+    
+    return v_1, v_2, v_1/v_2
     
     
 #print(fit_data("H2S"))
