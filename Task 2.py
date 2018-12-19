@@ -11,24 +11,16 @@ import scipy.optimize as optimization
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
-'''Bohr radius in angstroms'''
-a0 = 0.52917721092 
 
-#'''Unified atomic mass unit in kg'''
-#m_u = 1.66053904 * 10**-27
-
-'''Unified atomic mass unit in atomic units'''
-m_u = 1822.888486192
-
-
-'''Get path of current file'''
-dirname = os.path.dirname(__file__)
+#'''Get path of current file'''
+#dirname = os.path.dirname(__file__)
 
 
 '''Get table of values - columns for r, theta, energy'''
-def table(molecule):
-    moldir = os.path.join(dirname, '%soutfiles') % molecule
-    filenames = os.listdir(moldir)
+def table(mol_dir):
+    
+    #moldir = os.path.join(dirname, '%soutfiles') % molecule
+    filenames = os.listdir(mol_dir)
     
     molvalues = []
     
@@ -37,7 +29,7 @@ def table(molecule):
         r = float(filename[5:9])
         theta = float(filename[14:len(filename)-4])
 
-        f = open(os.path.join(moldir, filename))
+        f = open(os.path.join(mol_dir, filename))
         for line in f:
             if 'SCF Done:' in line:
                 l = line.split()
@@ -48,8 +40,8 @@ def table(molecule):
 
 
 '''Get energy data as an array'''
-def val_arr(molecule):
-    raw = table(molecule)
+def val_arr(mol_dir):
+    raw = table(mol_dir)
     
     theta = np.asarray(np.split(np.asarray(raw)[:,1], 25))
     E_pre_sort = np.split(np.asarray(raw)[:,2], 25)
@@ -65,25 +57,31 @@ def val_arr(molecule):
     return E
 
 
-def plot_surface(molecule):
+def plot_surface(mol_dir):
     r = np.linspace(0.7,1.9,25)
     theta = np.linspace(70,160,91)
-    E = val_arr(molecule)
+    E = val_arr(mol_dir)
     
     theta,r = np.meshgrid(theta,r)
     
-    fig = plt.figure()
+    letter = str(mol_dir[len(mol_dir)-8:len(mol_dir)-7]).upper()
+    
+    fig = plt.figure(1)
+    fig.suptitle('PES for H2%s as a function of %s-H bond length (r) and angle (theta)' % (letter, letter),fontsize=12)
     ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlabel('theta / degrees', fontsize=10)
+    ax.set_ylabel('r / Angstroms', fontsize=10)
+    ax.set_zlabel('E / Hartree',fontsize=10)
     ax.plot_surface(theta, r, E, cmap="coolwarm", linewidth=0)
 
 
-'''Determine equilibrium geometry and energy of molecule, and index (in the arrays) of those values'''
-def eqm(molecule):
-    E = val_arr(molecule)
+'''Determine equilibrium geometry and energy of molecule, and index (in the array) of those values'''
+def eqm(E):
     E_min = np.amin(E)
     (r_ind, theta_ind) = np.where(E==E_min)
     r_min = 0.05*(int(r_ind)) + 0.70
     theta_min = int(theta_ind) + 70
+    #print([r_min, int(r_ind), theta_min, int(theta_ind), E_min])
     return [r_min, int(r_ind), theta_min, int(theta_ind), E_min]
 
 
@@ -92,21 +90,20 @@ def rezero(array_in, new_zero):
 
 
 def chunk(array, l, u, ind):
-    return(array[ind-l:ind+l])
+    return(array[ind-l:ind+u])
 
 
-def fit_data(molecule):
+def fit_data(mol_dir):
     '''Energy and minimums in arrays'''
-    E = val_arr(molecule)    
-    [r_min, r_ind, theta_min, theta_ind, E_min] = eqm(molecule)
+    E = val_arr(mol_dir)    
+    [r_min, r_ind, theta_min, theta_ind, E_min] = eqm(E)
     
     '''define r and theta values, and re-zero & scale them for fitting'''
     old_r = np.linspace(0.7,1.9,25)
     old_theta = np.linspace(70,160,91)
     
     r = rezero(old_r, r_min)
-    r = [x / a0 for x in r]
-    '''/ a0 after first x'''
+    r = [x for x in r]
     
     theta = rezero(old_theta, theta_min)
     
@@ -116,20 +113,22 @@ def fit_data(molecule):
     
     '''Fit curve to a + cx^2 curve, and return parameters (a,c)'''
     x0 = np.array([0,0])
+    
     def fn(x, a, c):
         return a + c * x**2
+    
     def fit_each(dof_E, dof):
         params, params_covariance = optimization.curve_fit(fn, dof, dof_E, x0)
-        print(params)
         return(params)
         
     '''Define parameters for data chunk size; 
-    tc: "theta chunk"; rc: "r chunk"'''
-    tc_u = 25
-    tc_l = 20
+    tc: "theta chunk"; rc: "r chunk"
+    manually-adjusted for best fit'''
+    tc_u = 15
+    tc_l = 10
     
     rc_u = 4
-    rc_l = 3
+    rc_l = 1
     
     '''Get fit parameters for theta and r curves'''
     params_theta = fit_each(chunk(E_r_min, tc_l, tc_u, theta_ind), chunk(theta, tc_l, tc_u, theta_ind))
@@ -140,32 +139,64 @@ def fit_data(molecule):
     fnplot_r = [params_r[0] + float(params_r[1]) * x**2 for x in r]
     
     '''plot E vs 'degree of freedom' scatter, and overlay fitted curve; for visual checking'''
-    plt.figure(1)
+    '''plt.figure(2)
     plt.scatter(theta, E_r_min, marker = ".")
     plt.plot(theta, fnplot_theta)
     
-    plt.figure(2)
+    plt.figure(3)
     plt.scatter(r, E_theta_min, marker = ".")
     plt.plot(r, fnplot_r)
     
-    plt.show()
-    
+    plt.show()'''
     return [params_theta, params_r, r_min]
 
 
-def get_freq(params):
-    r_eq = params[2] / a0
-    '''a0 after params[2]'''
+def get_freqs(mol_dir):
+    params = fit_data(mol_dir)
+    r_eq = params[2] * 10**-10 #in m
     
-    k_r = 2 * params[1][1]
-    k_theta = 2 * params[0][1]
+    m_u = 1.66053886 * 10**-27 #in kg
+    Eh = 4.359744650 * 10**-18 # in J
+    c = 2.99792458*(10**10) #in cm per s
     
-    v_1 = 1/(2 * np.pi) * np.sqrt(k_r / (2 * m_u))
-    v_2 = 1/(2 * np.pi) * np.sqrt(k_theta / (r_eq**2 * (0.5 * m_u)))
+    '''Convert k_r to SI units'''
+    k_r = 2 * params[1][1] #Hartrees per Angstrom^2
+    k_r_SI = k_r * Eh * (10**-10)**-2 #J per m^2
     
-    return v_1, v_2, v_1/v_2
+    '''Convert k_theta to SI units'''
+    k_theta = 2 * params[0][1] #Hartrees per degree^2
+    k_theta_SI = k_theta * Eh * (2 * np.pi / 360)**-2
     
+    '''Convert k_r to frequency'''
+    v1 = 1/(2 * np.pi) * np.sqrt(k_r_SI / (2 * m_u)) #Hz
     
-print(get_freq(fit_data("H2O")))
+    '''Convert k_theta to frequency'''
+    v2 = 1/(2 * np.pi) * np.sqrt(k_theta_SI / (r_eq**2 * 0.5 * m_u)) #Hz
     
-#np.savetxt('Energy Table.csv', table("H2O"), delimiter=',')
+    dp = 2
+    
+    return np.round(v1/c, dp), np.round(v2/c, dp)
+    
+if __name__ == "__main__":
+    mol_dir = input("Input directory \n")
+    letter = ""
+    #mol_dir = "C:/Users/bdenn/Documents/Programming Exercises/2 -  Data processing and plotting/H2Ooutfiles"
+    
+    print(mol_dir)
+    letter = str(mol_dir[len(mol_dir)-8:len(mol_dir)-7]).upper()
+    print(letter)
+    
+    [r_min, r_ind, theta_min, theta_ind, E_min] = eqm(val_arr(mol_dir))
+    
+    plot_surface(mol_dir)
+    freqs = get_freqs(mol_dir)
+    
+    print("\nH2" + letter + " Equilibrium Geometry:")
+    print(letter + "-H bond length = " + str(r_min) + " Angstrom")
+    print("H-" + letter + "-H bond angle = " + str(theta_min) + " degrees")
+    print("Potential energy at this geometry = " + str(E_min) + " Hartree\n")
+    
+    print("Symmetrical Normal Modes:")
+    print("Stretch: frequency v1 = " + str(freqs[0]) + " wavenumbers")
+    print("Bend: frequency v2 = " + str(freqs[1]) + " wavenumbers")
+    
