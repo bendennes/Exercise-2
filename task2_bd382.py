@@ -79,6 +79,8 @@ def plot_surface(mol_dir):
 def eqm(E):
     E_min = np.amin(E)
     (r_ind, theta_ind) = np.where(E==E_min)
+    
+    '''converts index to actual value using known placement of values in array'''
     r_min = 0.05*(int(r_ind)) + 0.70
     theta_min = int(theta_ind) + 70
     #print([r_min, int(r_ind), theta_min, int(theta_ind), E_min])
@@ -111,7 +113,7 @@ def fit_data(mol_dir):
     E_r_min = E[r_ind]
     E_theta_min = E[:,theta_ind]
     
-    '''Fit curve to a + cx^2 curve, and return parameters (a,c)'''
+    '''Define curve fit: to a + cx^2 curve, and return parameters (a,c)'''
     x0 = np.array([0,0])
     
     def fn(x, a, c):
@@ -178,13 +180,11 @@ def get_freqs(mol_dir):
     return np.round(v1/c, dp), np.round(v2/c, dp)
     
 if __name__ == "__main__":
+    '''User input: directory of simulated files'''
     mol_dir = input("Input directory \n")
-    letter = ""
-    #mol_dir = "C:/Users/bdenn/Documents/Programming Exercises/2 -  Data processing and plotting/H2Ooutfiles"
     
-    print(mol_dir)
-    letter = str(mol_dir[len(mol_dir)-8:len(mol_dir)-7]).upper()
-    print(letter)
+    '''Get letter 'O' or 'S' from directory name'''
+    letter = mol_dir[len(mol_dir)-9:len(mol_dir)-8]
     
     [r_min, r_ind, theta_min, theta_ind, E_min] = eqm(val_arr(mol_dir))
     
